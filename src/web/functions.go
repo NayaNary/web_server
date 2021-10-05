@@ -22,7 +22,7 @@ func NewWebRouts() *WebRouts {
 	}
 }
 
-func (w WebRouts) RoutConnect() *mux.Router {
+func (w *WebRouts) RoutConnect() *mux.Router {
 
 	w.R.HandleFunc("/", w.inputData).Methods("POST")
 	w.R.HandleFunc("/amount", w.amountPages)
@@ -31,18 +31,18 @@ func (w WebRouts) RoutConnect() *mux.Router {
 	return w.R
 }
 
-func (wr WebRouts) inputData(w http.ResponseWriter, r *http.Request) {
+func (wr *WebRouts) inputData(w http.ResponseWriter, r *http.Request) {
 	body := readBody(r)
 	answer_byte := wr.Pages.PreProcessing(body)
 
 	w.Write(answer_byte)
-   fmt.Println("Pages: ", wr.Pages)
+  // fmt.Println("Pages: ", wr.Pages)
 }
-func (wr WebRouts) amountPages(w http.ResponseWriter, r *http.Request) {
+func (wr *WebRouts) amountPages(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("amount pages"))
 	fmt.Println("amount pages")
 }
-func (wr WebRouts) outputData(w http.ResponseWriter, r *http.Request) {
+func (wr *WebRouts) outputData(w http.ResponseWriter, r *http.Request) {
 	urlValue := r.URL.Query()
 	num := urlValue.Get(":id")
 	id, _ := strconv.ParseUint(num, 10, 0)
