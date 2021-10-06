@@ -39,15 +39,17 @@ func (wr *WebRouts) inputData(w http.ResponseWriter, r *http.Request) {
   // fmt.Println("Pages: ", wr.Pages)
 }
 func (wr *WebRouts) amountPages(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("amount pages"))
+	w.Write(wr.Pages.CountPages())
 	fmt.Println("amount pages")
 }
 func (wr *WebRouts) outputData(w http.ResponseWriter, r *http.Request) {
-	urlValue := r.URL.Query()
-	num := urlValue.Get(":id")
-	id, _ := strconv.ParseUint(num, 10, 0)
+	fmt.Println("url:",r.URL)
+	vars:= mux.Vars(r)
+	urlValue := vars["id"]
+	fmt.Println("url in:",urlValue)
+	id, _ := strconv.ParseUint(urlValue, 10, 0)
+	fmt.Println("id in:", id)
 	answer := wr.Pages.Page(id)
-
 	w.Write(answer)
 	fmt.Println("output data")
 }
