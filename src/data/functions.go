@@ -27,7 +27,7 @@ func New() *DataProcessing {
 	}
 
 	database := db.NewConnect(env.Db.NameDriver, connParam)
-	if database.LastError().Error()!= ""{
+	if database.LastError() != nil {
 		database.CreateTable(env.Db.DbName)
 	}
 
@@ -35,7 +35,7 @@ func New() *DataProcessing {
 		Pages:  make(map[uint64][]InputData),
 		LastId: 1,
 		objDB:  *database,
-		Conf: env,
+		Conf:   env,
 	}
 
 	dp.Timer = dp.StartWritePages()
@@ -106,39 +106,38 @@ func (p *DataProcessing) StartWritePages() (t *time.Ticker) {
 	t = time.NewTicker(time.Duration(p.Conf.Db.TimeWrite) * time.Second)
 	go func(t *time.Ticker) {
 		defer t.Stop()
-	    p.WritePages()
+		for range p.Timer.C {
+			p.WritePages()
+		}
 	}(t)
 	return
 }
 
-func (p *DataProcessing) WritePages(){
-	for now := range p.Timer.C {
-		log.Println(now, time.Now().Format("2006-01-02 15:04:05"))
-		rows := [...]string{"page", "create_at"}
+func (p *DataProcessing) WritePages() {
 
-		p.mux.Lock()
-		page := p.Pages[p.LastId]
-		p.mux.Unlock()
+	log.Println(time.Now().Format("2006-01-02 15:04:05"))
+	rows := [...]string{"page", "create_at"}
 
-		if len(page) != 0 {
-			values := make([]interface{}, 0)
-			dataWrite, err := json.Marshal(page)
-			if err != nil {
-				fmt.Println("marsh:", err)
-			}
-
-			values = append(values, string(dataWrite))
-			values = append(values, time.Now().Format("2006-01-02 15:04:05"))
-			p.objDB.Insert("pages", rows[0:2], values)
-			if p.objDB.LastError() == nil {
-				p.mux.Lock()
-				delete(p.Pages, p.LastId)
-				p.mux.Unlock()
-			} else {
-				log.Println("insert:", p.objDB.LastError().Error())
-			}
+	p.mux.Lock()
+	page := p.Pages[p.LastId]
+	p.mux.Unlock()
+	if len(page) != 0 {
+		values := make([]interface{}, 0)
+		dataWrite, err := json.Marshal(page)
+		if err != nil {
+			fmt.Println("marsh:", err)
 		}
 
+		values = append(values, string(dataWrite))
+		values = append(values, time.Now().Format("2006-01-02 15:04:05"))
+		p.objDB.Insert("pages", rows[0:2], values)
+		if p.objDB.LastError() == nil {
+			p.mux.Lock()
+			delete(p.Pages, p.LastId)
+			p.mux.Unlock()
+		} else {
+			log.Println("insert:", p.objDB.LastError().Error())
+		}
 	}
 }
 
