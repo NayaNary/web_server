@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -16,12 +17,41 @@ type Db struct {
 
 func NewConnect(nameDriver string, connParam string) *Db {
 	db, err := sql.Open(nameDriver, connParam)
+
+	if err!= nil {
+		log.Println(err.Error())	
+	}
+
+	_,err = db.Query("select * from pages limit 1")
+	if err!= nil {
+		log.Println(err.Error())	
+	}
 	return &Db{obj: db, lastError: err}
+}
+
+func (db *Db) CreateTable(name string){
+	db.lastError = nil	
+	
+	if db.lastError == nil{
+		_, db.lastError = db.obj.Exec(`CREATE TABLE IF NOT EXISTS public.pages
+		(
+			id bigint NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 9223372036854775807 CACHE 1 ),
+			create_at timestamp without time zone NOT NULL,
+			page jsonb,
+			CONSTRAINT pages_pkey PRIMARY KEY (id)
+		)`)
+		if db.lastError!=nil{
+			log.Println(db.lastError.Error())
+		}
+	}else{
+		log.Println(db.lastError.Error())
+	}
 }
 
 func (db *Db) Close() {
 	db.lastError = db.obj.Close()
 }
+
 
 func (db *Db) LastError() error {
 	return db.lastError

@@ -27,6 +27,9 @@ func New() *DataProcessing {
 	}
 
 	database := db.NewConnect(env.Db.NameDriver, connParam)
+	if database.LastError().Error()!= ""{
+		database.CreateTable(env.Db.DbName)
+	}
 
 	dp := &DataProcessing{
 		Pages:  make(map[uint64][]InputData),
