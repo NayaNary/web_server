@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -22,10 +23,17 @@ func main() {
 		if n == 0 {
 			log.Println(err.Error())
 		} else {
-			if data == "stop" {
-				srv.Close()
+			if data == "stop" {		
 				webRouts.ProcData.Timer.Stop()
-				webRouts.ProcData.WritePages()
+				
+				if len(webRouts.ProcData.Pages[webRouts.ProcData.LastId])>0{
+					webRouts.ProcData.WritePages()
+				}
+	
+				err:= srv.Shutdown(context.Background())
+				if err !=nil{
+					log.Println(err.Error())
+				}
 				break
 			}
 		}
