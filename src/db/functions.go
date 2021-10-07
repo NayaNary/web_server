@@ -42,16 +42,14 @@ func (db *Db) Insert(table string, rows []string, values []interface{}) (result 
 		return
 	}
 
-	sqlQuery := "insert into " + table //+ "("
+	sqlQuery := "insert into " + table
 
 	sqlQuery += addRows(rows, "insert")
 
 	sqlQuery += "values "
 
 	sqlQuery += addValues(values, "insert")
-	fmt.Println(sqlQuery)
 	result, db.lastError = db.obj.Exec(sqlQuery)
-	fmt.Println("err", db.lastError)
 	return
 }
 

@@ -3,56 +3,66 @@ package data
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
+	"log"
 	"time"
 
+	"test.task/src/config"
 	"test.task/src/db"
 )
 
-type DataProcessing struct {
-	mux    sync.Mutex
-	Pages  map[uint64][]InputData
-	LastId uint64
-	objDB  db.Db
-	timer  *time.Ticker
-}
+func New() *DataProcessing {
+	env := config.New()
 
-func NewDataProcessing() *DataProcessing {
-	connParam := "user=postgres password=123456789 dbname=test_task sslmode=disable"
-	database := db.NewConnect("postgres", connParam)
+	var connParam string
+	switch env.Db.NameDriver {
+	case "postgres":
+		connParam = fmt.Sprintf("user=%v password=%v dbname=%v sslmode=%v",
+			env.Db.User, env.Db.Password, env.Db.DbName, env.Db.SslMode)
+	case "mysql":
+		connParam = fmt.Sprintf("%v:%v@/%v",
+			env.Db.User, env.Db.Password, env.Db.DbName)
+	default:
+		connParam = fmt.Sprintf("user=%v password=%v dbname=%v sslmode=%v",
+			env.Db.User, env.Db.Password, env.Db.DbName, env.Db.SslMode)
+	}
+
+	database := db.NewConnect(env.Db.NameDriver, connParam)
+
 	dp := &DataProcessing{
 		Pages:  make(map[uint64][]InputData),
 		LastId: 1,
 		objDB:  *database,
+		Conf: env,
 	}
-	dp.timer = dp.StartWritePages()
+
+	dp.Timer = dp.StartWritePages()
+
 	return dp
 }
 
 func (p *DataProcessing) PreProcessing(input []byte) (answer []byte) {
-	var iD []InputData
-	//fmt.Println("Body: ", input)
+	var inputData []InputData
 
-	err := json.Unmarshal(input, &iD)
+	err := json.Unmarshal(input, &inputData)
 	if err != nil {
-		fmt.Println("Error:", err)
+		log.Println("Error:", err)
 	}
 
-	var answer_struct ResultInput
-	answer_struct.Result = false
-	if len(iD) != 0 {
+	var bodyAnswer ResultInput
+	bodyAnswer.Result = false
+	if len(inputData) != 0 {
 		page := p.Pages[p.LastId]
-		page = append(page, iD...)
+		page = append(page, inputData...)
 		p.mux.Lock()
 		p.Pages[p.LastId] = page
 		p.mux.Unlock()
-		answer_struct.Result = true
-		answer_struct.PageId = p.LastId
+		bodyAnswer.Result = true
+		bodyAnswer.PageId = p.LastId
 
 	}
-	answer, err = json.Marshal(answer_struct)
+	answer, err = json.Marshal(bodyAnswer)
 	if err != nil {
-		fmt.Println("Error:", err)
+		log.Println("Error:", err)
 	}
 	return
 }
@@ -63,93 +73,94 @@ func (p *DataProcessing) Page(id uint64) (answer []byte) {
 	page := p.objDB.Select("pages", row[0:1], where)
 	defer page.Close()
 
-	trans := make(map[string]OutputData)
+	outputData := make(map[string]OutputData)
 	var data OutputData
 	if page.Next() {
 		var dataDB []uint8
 		err := page.Scan(&dataDB)
 		if err != nil {
-			fmt.Println("err scan:", err)
+			log.Println("err scan:", err)
 		}
 		var tran []InputData
 		err = json.Unmarshal([]byte(dataDB), &tran)
 		if err != nil {
-			fmt.Println("err unmarshal:", err)
+			log.Println("err unmarshal:", err)
 		}
 		for i := 0; i < len(tran); i++ {
 			data.LastTrade = tran[i].LastTradePrice
 			data.Price = tran[i].Price24h
 			data.Volume = tran[i].Volume24h
-			trans[tran[i].Symbol] = data
+			outputData[tran[i].Symbol] = data
 		}
 	}
 
-	answer, _ = json.Marshal(trans)
+	answer, _ = json.Marshal(outputData)
 	return
 }
 
 func (p *DataProcessing) StartWritePages() (t *time.Ticker) {
 
-	t = time.NewTicker(10 * time.Second)
-	go func() {
+	t = time.NewTicker(time.Duration(p.Conf.Db.TimeWrite) * time.Second)
+	go func(t *time.Ticker) {
 		defer t.Stop()
-		for now := range t.C {
-			fmt.Println(now, time.Now().Format("2006-01-02 15:04:05"))
-			rows := [...]string{"page", "create_at"}
-
-			p.mux.Lock()
-			//	fmt.Println("id:", p.LastId)
-			//	fmt.Println("pages:", p.Pages)
-			page := p.Pages[p.LastId]
-			p.mux.Unlock()
-
-			if len(page) != 0 {
-				vi := make([]interface{}, 0)
-				dn, err := json.Marshal(page)
-				if err != nil {
-					fmt.Println("marsh:", err)
-				}
-
-				vi = append(vi, string(dn))
-				vi = append(vi, time.Now().Format("2006-01-02 15:04:05"))
-				//	fmt.Println("vals:", vi)
-				p.objDB.Insert("pages", rows[0:2], vi)
-				if p.objDB.LastError() == nil {
-					p.mux.Lock()
-					delete(p.Pages, p.LastId)
-					p.mux.Unlock()
-				} else {
-					fmt.Println("insert:", p.objDB.LastError().Error())
-				}
-
-			}
-
-		}
-	}()
+	    p.WritePages()
+	}(t)
 	return
 }
 
-func (p *DataProcessing) CountPages()(answer []byte){
-	
+func (p *DataProcessing) WritePages(){
+	for now := range p.Timer.C {
+		log.Println(now, time.Now().Format("2006-01-02 15:04:05"))
+		rows := [...]string{"page", "create_at"}
+
+		p.mux.Lock()
+		page := p.Pages[p.LastId]
+		p.mux.Unlock()
+
+		if len(page) != 0 {
+			values := make([]interface{}, 0)
+			dataWrite, err := json.Marshal(page)
+			if err != nil {
+				fmt.Println("marsh:", err)
+			}
+
+			values = append(values, string(dataWrite))
+			values = append(values, time.Now().Format("2006-01-02 15:04:05"))
+			p.objDB.Insert("pages", rows[0:2], values)
+			if p.objDB.LastError() == nil {
+				p.mux.Lock()
+				delete(p.Pages, p.LastId)
+				p.mux.Unlock()
+			} else {
+				log.Println("insert:", p.objDB.LastError().Error())
+			}
+		}
+
+	}
+}
+
+func (p *DataProcessing) CountPages() (answer []byte) {
+
 	row := [...]string{"id"}
-	where:="ORDER BY id DESC LIMIT 1"
+	where := "ORDER BY id DESC LIMIT 1"
 	page := p.objDB.Select("pages", row[0:1], where)
-	defer page.Close()	
-	var resultGet struct{
-			AmountPages uint64 `json:"amount pages"`
-			Message string `json:"message,omitempty"`
-		}
-		if p.objDB.LastError() != nil {
-			resultGet.Message =p.objDB.LastError().Error() 
-		}
-	if page.Next(){
+	defer page.Close()
+
+	if p.objDB.LastError() != nil {
+		resultGet.Message = p.objDB.LastError().Error()
+	}
+	if page.Next() {
 		var amount uint64
 		err := page.Scan(&amount)
 		if err != nil {
-			fmt.Println("err scan:", err)
-		}	
+			log.Println("err scan:", err)
+		}
 		resultGet.AmountPages = amount
 	}
-	answer, _ = json.Marshal(resultGet)
+	var err error
+	answer, err = json.Marshal(resultGet)
+	if err != nil {
+		log.Println("err scan:", err)
+	}
 	return
 }

@@ -1,10 +1,11 @@
 package web
 
 import (
-	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"test.task/src/data"
@@ -12,14 +13,32 @@ import (
 
 type WebRouts struct {
 	R     *mux.Router
-	Pages data.DataProcessing
+	ProcData *data.DataProcessing
 }
 
-func NewWebRouts() *WebRouts {
+func New() *WebRouts {
 	return &WebRouts{
 		R:     mux.NewRouter(),
-		Pages: *data.NewDataProcessing(),
+		ProcData: data.New(),
 	}
+}
+func (w *WebRouts) StartServer() (srv *http.Server) {
+
+	addrSrv := w.ProcData.Conf.Web.Host + ":" + w.ProcData.Conf.Web.Port
+
+	srv = &http.Server{
+		Handler:      w.RoutConnect(),
+		Addr:         addrSrv,
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
+	
+	go func(srv *http.Server) {
+		log.Println("Запущен сервер: ", srv.Addr)
+		log.Fatal(srv.ListenAndServe())
+	}(srv)
+
+	return
 }
 
 func (w *WebRouts) RoutConnect() *mux.Router {
@@ -33,45 +52,40 @@ func (w *WebRouts) RoutConnect() *mux.Router {
 
 func (wr *WebRouts) inputData(w http.ResponseWriter, r *http.Request) {
 	body := readBody(r)
-	answer_byte := wr.Pages.PreProcessing(body)
 
-	w.Write(answer_byte)
-  // fmt.Println("Pages: ", wr.Pages)
+	answer := wr.ProcData.PreProcessing(body)
+
+	w.Write(answer)
 }
 func (wr *WebRouts) amountPages(w http.ResponseWriter, r *http.Request) {
-	w.Write(wr.Pages.CountPages())
-	fmt.Println("amount pages")
+	w.Write(wr.ProcData.CountPages())
 }
 func (wr *WebRouts) outputData(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("url:",r.URL)
-	vars:= mux.Vars(r)
+	vars := mux.Vars(r)
 	urlValue := vars["id"]
-	fmt.Println("url in:",urlValue)
 	id, _ := strconv.ParseUint(urlValue, 10, 0)
-	fmt.Println("id in:", id)
-	answer := wr.Pages.Page(id)
+	answer := wr.ProcData.Page(id)
 	w.Write(answer)
-	fmt.Println("output data")
 }
 
 func readBody(r *http.Request) (bs []byte) {
 	bs = make([]byte, 255)
 	var bodyFul []byte
 	for {
-		N, ErrRead := r.Body.Read(bs)
-		if ErrRead == io.EOF {
-			for i := 0; i < N; i++ {
+		n, errRead := r.Body.Read(bs)
+		if errRead == io.EOF {
+			for i := 0; i < n; i++ {
 				bodyFul = append(bodyFul, bs[i])
 			}
 			break
 		}
-		for i := 0; i < N; i++ {
+		for i := 0; i < n; i++ {
 			bodyFul = append(bodyFul, bs[i])
 		}
 	}
 	errClose := r.Body.Close()
 	if errClose != nil {
-		fmt.Println(errClose, "ReadDataRequest")
+		log.Println(errClose, "ReadDataRequest")
 	}
 
 	return bodyFul

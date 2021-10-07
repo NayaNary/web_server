@@ -1,0 +1,4 @@
+FROM go:1.17.1 
+WORKDIR /usr/app
+COPY ./src ./src
+EXPOSE 5000

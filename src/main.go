@@ -3,23 +3,31 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
-	"time"
+	"os"
 
 	"test.task/src/web"
 )
 
 func main() {
+	
+	webRouts := web.New()
 
-	webRouts := web.NewWebRouts()
+	srv := webRouts.StartServer()
 
-	srv := &http.Server{
-		Handler: webRouts.RoutConnect(),
-		Addr:    "127.0.0.1:5000",
-		WriteTimeout: 15 * time.Second,
-        ReadTimeout:  15 * time.Second,
+	var data string
+
+	for {
+		fmt.Println("Введите 'stop' для закрытия приложения")
+		n, err := fmt.Fscan(os.Stdin, &data)
+		if n == 0 {
+			log.Println(err.Error())
+		} else {
+			if data == "stop" {
+				srv.Close()
+				webRouts.ProcData.Timer.Stop()
+				webRouts.ProcData.WritePages()
+				break
+			}
+		}
 	}
-	fmt.Println("server start: ",srv.Addr)
-	log.Fatal(srv.ListenAndServe())
-
 }
