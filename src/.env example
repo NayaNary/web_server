@@ -1,0 +1,9 @@
+DB_NAME = 
+DRIVER_NAME = postgres
+PASSWORD = 
+DB_USER = postgres
+SSL_MODE = disable
+TIME_WRITE = 30
+
+HOST = localhost
+PORT = 
